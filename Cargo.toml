@@ -3,6 +3,8 @@ name = "quanta-wasm"
 version = "0.1.0"
 edition = "2021"
 description = "WASM bindings for QuantaChain PQC wallet operations"
+repository = "https://github.com/quantachain/quanta-wasm"
+license = "Apache-2.0"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
