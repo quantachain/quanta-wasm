@@ -17,8 +17,18 @@ serde           = { version = "1.0", features = ["derive"] }
 serde-wasm-bindgen = "0.6"
 serde_json      = "1.0"
 
-# Crypto — pure Rust only (no C FFI allowed in WASM target)
-# Falcon-512: pure-Rust NIST PQC signature scheme
+# Crypto — pure-Rust Falcon-512 (compiles to WASM; no C FFI).
+# pqcrypto-falcon cannot target wasm32-unknown-unknown because it wraps a C
+# reference implementation via the cc crate.
+#
+# SIGNED-MESSAGE FORMAT CONTRACT:
+#   falcon-rust's sign() returns raw signature bytes only.
+#   The node (pqcrypto-falcon) expects: SignedMessage = sig_bytes || msg_bytes.
+#   We construct this manually in sign_transaction():
+#       output = falcon_sign(hash).to_bytes() || hash_bytes   (sig || msg)
+#   The node's open(SignedMessage, pk) will verify sig over msg and return msg.
+#   Both libraries implement NIST Falcon-512 with the same wire encoding,
+#   so the raw sig bytes are byte-for-byte compatible.
 falcon-rust     = "0.1"
 sha3            = "0.10"
 hmac            = "0.12"
@@ -30,7 +40,6 @@ bip39           = "2.0"
 
 # RNG — must use the "js" feature so getrandom works in WASM
 getrandom       = { version = "0.2", features = ["js"] }
-rand            = "0.8"
 
 # Better WASM panic messages in browser console
 console_error_panic_hook = "0.1"

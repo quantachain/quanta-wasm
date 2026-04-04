@@ -420,7 +420,6 @@ dependencies = [
  "hex",
  "hmac",
  "js-sys",
- "rand",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
