@@ -1,6 +1,6 @@
 [package]
 name = "quanta-wasm"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "WASM bindings for QuantaChain PQC wallet operations"
 repository = "https://github.com/quantachain/quanta-wasm"
