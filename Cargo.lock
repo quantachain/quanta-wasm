@@ -411,7 +411,7 @@ dependencies = [
 
 [[package]]
 name = "quanta-wasm"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "bip39",
  "console_error_panic_hook",
