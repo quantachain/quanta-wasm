@@ -36,8 +36,13 @@ use falcon_rust::falcon512::{
 
 type HmacSha256 = Hmac<Sha3_256>;
 
-/// Domain separation tag — MUST match `SIGNING_DOMAIN` in signatures.rs.
+/// Domain separation tag for transaction signing — MUST match `SIGNING_DOMAIN` in signatures.rs.
 const SIGNING_DOMAIN: &[u8] = b"QUANTA_TX_V1:";
+
+/// Domain separation tag for message signing (auth, forum login, dApp proofs).
+/// Different from SIGNING_DOMAIN so a message signature cannot be replayed as a transaction.
+const MSG_SIGNING_DOMAIN: &[u8] = b"QUANTA_MSG_V1:";
+
 
 // ---------------------------------------------------------------------------
 // Panic hook
@@ -243,6 +248,71 @@ pub fn verify_signature(hash_hex: &str, signed_msg_hex: &str, pubkey_hex: &str) 
     let Ok(sig) = Signature::from_bytes(sig_part)  else { return false; };
 
     falcon_verify(&hash_bytes, &sig, &pk)
+}
+
+/// Sign an arbitrary message with a Falcon-512 secret key.
+///
+/// Uses domain tag `QUANTA_MSG_V1:` — signatures produced here cannot be
+/// replayed as transaction signatures (which use `QUANTA_TX_V1:`).
+///
+/// `message`         — UTF-8 plaintext to sign (e.g. a login challenge).
+/// `secret_key_hex`  — hex of the Falcon-512 secret key.
+///
+/// Returns hex of `raw_sig_bytes || sha3_256_hash` (same layout as sign_transaction).
+#[wasm_bindgen]
+pub fn sign_message(message: &str, secret_key_hex: &str) -> Result<String, JsValue> {
+    let msg_bytes = message.as_bytes();
+    let mut sk_bytes = hex::decode(secret_key_hex)
+        .map_err(|e| JsValue::from_str(&format!("Bad secret_key hex: {}", e)))?;
+
+    let sk = SecretKey::from_bytes(&sk_bytes)
+        .map_err(|_| JsValue::from_str("Invalid Falcon-512 secret key"))?;
+    sk_bytes.zeroize();
+
+    // Hash: SHA3-256(QUANTA_MSG_V1: || message_bytes)
+    let mut hasher = Sha3_256::new();
+    hasher.update(MSG_SIGNING_DOMAIN);
+    hasher.update(msg_bytes);
+    let hash: [u8; 32] = hasher.finalize().into();
+
+    let sig: Signature = falcon_sign(&hash, &sk);
+    let sig_bytes = sig.to_bytes();
+
+    // sig_bytes || hash — same layout as sign_transaction for consistency
+    let mut out = Vec::with_capacity(sig_bytes.len() + 32);
+    out.extend_from_slice(&sig_bytes);
+    out.extend_from_slice(&hash);
+    Ok(hex::encode(out))
+}
+
+/// Verify a Falcon-512 message signature produced by `sign_message()`.
+///
+/// `message`         — the original UTF-8 message that was signed.
+/// `signed_msg_hex`  — hex of the full blob (sig || hash) from sign_message.
+/// `pubkey_hex`      — hex of the 897-byte Falcon-512 public key.
+///
+/// Returns `true` only on strict cryptographic success.
+#[wasm_bindgen]
+pub fn verify_message(message: &str, signed_msg_hex: &str, pubkey_hex: &str) -> bool {
+    let msg_bytes = message.as_bytes();
+    let Ok(signed_bytes) = hex::decode(signed_msg_hex) else { return false; };
+    let Ok(pk_bytes)     = hex::decode(pubkey_hex)     else { return false; };
+
+    if signed_bytes.len() <= 32 { return false; }
+    let sig_part  = &signed_bytes[..signed_bytes.len() - 32];
+    let hash_part = &signed_bytes[signed_bytes.len() - 32..];
+
+    // Recompute expected hash and check it matches the embedded value
+    let mut hasher = Sha3_256::new();
+    hasher.update(MSG_SIGNING_DOMAIN);
+    hasher.update(msg_bytes);
+    let expected: [u8; 32] = hasher.finalize().into();
+    if hash_part != expected { return false; }
+
+    let Ok(pk)  = PublicKey::from_bytes(&pk_bytes) else { return false; };
+    let Ok(sig) = Signature::from_bytes(sig_part)  else { return false; };
+
+    falcon_verify(&expected, &sig, &pk)
 }
 
 /// Derive a Quanta address from a hex-encoded public key.
